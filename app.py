@@ -191,18 +191,46 @@ elif st.session_state.page == "search":
 
     items = load_items()
 
-    # Filterleiste
-    with st.expander("🔎 Filter & Suche anpassen", expanded=True):
+    # 1. KI-BILDSEARCH-BEREICH
+    st.markdown("### 📸 KI-Bildsuche (Verlorenes Kleidungsstück fotografieren)")
+    search_image = st.file_uploader(
+        "Lade ein Foto hoch – die KI filtert automatisch nach passenden Fundstücken", 
+        type=["jpg", "jpeg", "png", "webp"], 
+        key="search_img_upload"
+    )
+
+    ai_matched_category = None
+
+    if search_image is not None:
+        with st.spinner("KI vergleicht das Foto mit dem Fundbüro-Bestand..."):
+            prediction = predict_clothing(search_image)
+            ai_matched_category = prediction["label"]
+            conf = prediction["confidence"] * 100
+            
+            if conf >= 55:
+                st.success(f"Erkannte Kategorie für Suche: **{ai_matched_category}** (Sicherheit: {conf:.1f}%)")
+            else:
+                st.warning(f"Kategorie unsicher ({conf:.1f}%). Es wird trotzdem nach **{ai_matched_category}** gefiltert.")
+
+    # 2. MANUELLE FILTER
+    with st.expander("🔎 Manuelle Filter & Suche anpassen", expanded=(search_image is None)):
         f_col1, f_col2, f_col3 = st.columns(3)
         with f_col1:
             search_query = st.text_input("Freitextsuche", placeholder="Suchbegriff...")
-            selected_cat = st.selectbox("Kategorie", options=["Alle"] + get_unique_categories(items))
+            # Fallback auf KI-Kategorie, falls Bild hochgeladen wurde
+            cats = get_unique_categories(items)
+            default_cat_idx = 0
+            if ai_matched_category in cats:
+                default_cat_idx = cats.index(ai_matched_category) + 1
+            
+            selected_cat = st.selectbox("Kategorie", options=["Alle"] + cats, index=default_cat_idx)
         with f_col2:
             selected_color = st.selectbox("Farbe", options=["Alle"] + get_unique_colors(items))
             selected_location = st.selectbox("Fundort", options=["Alle"] + get_unique_locations(items))
         with f_col3:
             selected_status = st.selectbox("Status", options=["Alle", "Verfügbar", "Reserviert", "Abgeholt", "Archiviert"])
 
+    # 3. FILTERN DER ERGEBNISSE
     filtered = filter_items(
         items,
         query=search_query,
@@ -227,7 +255,6 @@ elif st.session_state.page == "search":
                 render_item_card(item)
                 if st.button(f"Details ansehen ## {item['id']}", key=f"btn_det_{item['id']}", use_container_width=True):
                     navigate_to("detail", item["id"])
-
 
 # ==========================================
 # SEITE: DETAILANSICHT
