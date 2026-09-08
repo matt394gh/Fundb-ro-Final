@@ -245,7 +245,7 @@ elif st.session_state.page == "detail":
         with col_img:
             img_p = Path(item.get("image_path", ""))
             if img_p.exists():
-                st.image(str(img_p), use_column_width=True)
+               st.image(str(img_p), use_container_width=True)
             else:
                 st.warning("Kein Bild verfügbar.")
 
