@@ -1,69 +1,60 @@
+import os
 import json
-from pathlib import Path
 import numpy as np
 from PIL import Image
+from pathlib import Path
 import streamlit as st
 
-# Pfade definieren
+# Pfade definieren (Hauptverzeichnis des Projekts)
 BASE_DIR = Path(__file__).resolve().parent.parent
-MODEL_DIR = BASE_DIR / "model"
-MODEL_PATH = MODEL_DIR / "keras_model.h5"
-LABELS_PATH = MODEL_DIR / "labels.txt"
-CONFIG_PATH = MODEL_DIR / "model_config.json"
+MODEL_PATH = BASE_DIR / "model.h5"  # Passe den Dateinamen an, falls er anders heißt (z. B. mobilenet.h5)
+CONFIG_PATH = BASE_DIR / "config.json"
+LABELS_PATH = BASE_DIR / "labels.json"
 
 
 def load_config() -> dict:
-    """Lädt die Modell-Konfiguration aus json."""
-    default_config = {
-        "image_width": 224,
-        "image_height": 224,
-        "normalization": "0_1",
-        "confidence_threshold": 0.55,
-        "model_type": "keras_h5"
-    }
+    """Lädt die Konfigurationsdatei."""
     if CONFIG_PATH.exists():
         try:
             with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-                config = json.load(f)
-                default_config.update(config)
-        except Exception:
-            pass
-    return default_config
+                return json.load(f)
+        except Exception as e:
+            st.warning(f"Fehler beim Laden von config.json: {e}")
+    return {}
 
 
 def load_labels() -> list:
-    """Lädt und bereinigt die Label-Datei."""
-    if not LABELS_PATH.exists():
-        return ["Sonstiges"]
-
-    labels = []
-    with open(LABELS_PATH, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            # Nummern entfernen (z.B. "0 T-Shirt" -> "T-Shirt")
-            parts = line.split(" ", 1)
-            if len(parts) > 1 and parts[0].replace(":", "").replace("-", "").isdigit():
-                clean_label = parts[1].strip()
-            else:
-                clean_label = line
-            labels.append(clean_label)
-
-    return labels if labels else ["Sonstiges"]
+    """Lädt die Klassen-Labels."""
+    if LABELS_PATH.exists():
+        try:
+            with open(LABELS_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            st.warning(f"Fehler beim Laden von labels.json: {e}")
+    return ["Sonstiges"]
 
 
 @st.cache_resource
 def load_keras_model():
-    """Lädt das Keras-Modell mit Caching."""
+    """Lädt das Keras-Modell und speichert es im Cache."""
     if not MODEL_PATH.exists():
+        st.error(f"❌ Modell-Datei nicht gefunden unter: `{MODEL_PATH}`")
         return None
+
+    # Prüfung auf Git LFS Pointer-Datei (falls die Datei nicht richtig hochgeladen wurde)
+    if MODEL_PATH.stat().st_size < 1000000:  # Kleiner als ~1 MB
+        st.error(
+            f"❌ Die Datei `{MODEL_PATH.name}` ist zu klein ({MODEL_PATH.stat().st_size} Bytes). "
+            "Vermutlich wurde nur ein Git-Pointer hochgeladen! Bitte lade die echte .h5-Datei manuell auf GitHub hoch."
+        )
+        return None
+
     try:
         import tensorflow as tf
         model = tf.keras.models.load_model(str(MODEL_PATH), compile=False)
         return model
     except Exception as e:
-        st.error(f"Fehler beim Laden des KI-Modells: {e}")
+        st.error(f"❌ Fehler beim Laden des KI-Modells (`{MODEL_PATH.name}`): {e}")
         return None
 
 
@@ -73,6 +64,7 @@ def predict_clothing(image_file) -> dict:
     labels = load_labels()
     model = load_keras_model()
 
+    # Fallback, falls das Modell nicht geladen werden konnte
     if model is None:
         return {
             "label": "Sonstiges (Modell nicht geladen)",
@@ -80,63 +72,69 @@ def predict_clothing(image_file) -> dict:
             "probabilities": {}
         }
 
-    # 1. Bild öffnen & RGB
-    img = Image.open(image_file).convert("RGB")
+    try:
+        # 1. Bild öffnen & auf RGB konvertieren
+        img = Image.open(image_file).convert("RGB")
 
-    # 2. Resizing
-    target_size = (config.get("image_width", 224), config.get("image_height", 224))
-    img = img.resize(target_size)
+        # 2. Resizing auf Eingabegröße (Standard: 224x224)
+        target_size = (config.get("image_width", 224), config.get("image_height", 224))
+        img = img.resize(target_size)
 
-    # 3. Array & Normalisierung
-    img_array = np.asarray(img, dtype=np.float32)
+        # 3. In Numpy-Array umwandeln
+        img_array = np.asarray(img, dtype=np.float32)
 
-    norm_type = config.get("normalization", "0_1")
-    if norm_type == "0_1":
-        img_array = img_array / 255.0
-    elif norm_type == "minus1_1":
-        img_array = (img_array / 127.5) - 1.0
-
-    # 4. Batch Dimensions
-    img_array = np.expand_dims(img_array, axis=0)
-
-   # 3. Array & Normalisierung
-    img_array = np.asarray(img, dtype=np.float32)
-
-    # Korrektur für MobileNetV2: Standardmäßig TensorFlow preprocess_input verwenden
-    from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
-    
-    # Falls in config explizit "0_1" gefordert ist, sonst immer MobileNet-Standards skaliere
-    norm_type = config.get("normalization", "minus1_1")
-    if norm_type == "minus1_1":
+        # 4. Bild-Vorverarbeitung für MobileNetV2 / Keras
+        from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
         img_array = preprocess_input(img_array)
-    elif norm_type == "0_1":
-        img_array = img_array / 255.0
-    else:
-        img_array = (img_array / 127.5) - 1.0
-        probs[lbl] = float(prob)
 
-    sorted_probs = sorted(probs.items(), key=lambda x: x[1], reverse=True)
-    top_label, top_conf = sorted_probs[0]
+        # 5. Batch-Dimension hinzufügen
+        img_array = np.expand_dims(img_array, axis=0)
 
-    threshold = config.get("confidence_threshold", 0.55)
-    final_label = top_label if top_conf >= threshold else "Unbekannt / Nicht eindeutig"
+        # 6. Vorhersage ausführen
+        preds = model.predict(img_array)[0]
 
-    return {
-        "label": final_label,
-        "confidence": top_conf,
-        "probabilities": dict(sorted_probs[:3])
-    }
+        # 7. Ergebnisse den Labels zuordnen
+        probs = {}
+        for idx, prob in enumerate(preds):
+            lbl = labels[idx] if idx < len(labels) else f"Klasse_{idx}"
+            probs[lbl] = float(prob)
+
+        sorted_probs = sorted(probs.items(), key=lambda x: x[1], reverse=True)
+        top_label, top_conf = sorted_probs[0]
+
+        # Threshold prüfen (Standard heruntergesetzt auf 0.30 für bessere Treffer)
+        threshold = config.get("confidence_threshold", 0.30)
+        final_label = top_label if top_conf >= threshold else "Unbekannt / Nicht eindeutig"
+
+        return {
+            "label": final_label,
+            "confidence": top_conf,
+            "probabilities": dict(sorted_probs[:3])
+        }
+
+    except Exception as e:
+        st.error(f"Fehler bei der Bildanalyse: {e}")
+        return {
+            "label": "Fehler bei Analyse",
+            "confidence": 0.0,
+            "probabilities": {}
+        }
 
 
 def get_model_info() -> dict:
-    """Gibt Statusinformationen zum Modell zurück."""
+    """Gibt Statusinformationen zum Modell für den Admin-Bereich zurück."""
     model = load_keras_model()
     labels = load_labels()
     config = load_config()
 
+    file_exists = MODEL_PATH.exists()
+    file_size_mb = round(MODEL_PATH.stat().st_size / (1024 * 1024), 2) if file_exists else 0
+
     return {
         "model_loaded": model is not None,
         "model_path": str(MODEL_PATH),
+        "file_exists": file_exists,
+        "file_size_mb": f"{file_size_mb} MB",
         "labels_count": len(labels),
         "labels": labels,
         "config": config
