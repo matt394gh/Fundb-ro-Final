@@ -99,13 +99,20 @@ def predict_clothing(image_file) -> dict:
     # 4. Batch Dimensions
     img_array = np.expand_dims(img_array, axis=0)
 
-    # 5. Prediction
-    preds = model.predict(img_array)[0]
+   # 3. Array & Normalisierung
+    img_array = np.asarray(img, dtype=np.float32)
 
-    # Matching mit Labels
-    probs = {}
-    for idx, prob in enumerate(preds):
-        lbl = labels[idx] if idx < len(labels) else f"Klasse_{idx}"
+    # Korrektur für MobileNetV2: Standardmäßig TensorFlow preprocess_input verwenden
+    from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
+    
+    # Falls in config explizit "0_1" gefordert ist, sonst immer MobileNet-Standards skaliere
+    norm_type = config.get("normalization", "minus1_1")
+    if norm_type == "minus1_1":
+        img_array = preprocess_input(img_array)
+    elif norm_type == "0_1":
+        img_array = img_array / 255.0
+    else:
+        img_array = (img_array / 127.5) - 1.0
         probs[lbl] = float(prob)
 
     sorted_probs = sorted(probs.items(), key=lambda x: x[1], reverse=True)
