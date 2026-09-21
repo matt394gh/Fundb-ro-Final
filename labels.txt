@@ -1,0 +1,4 @@
+0 Oberteil
+1 Hose
+2 Schuhe
+3 sonstiges
