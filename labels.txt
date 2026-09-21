@@ -1,5 +1,5 @@
-0 pullover
-1 hose
+0 Pullover
+1 Hose
 2 Schuhe
-3 anderes
-4 T Sirt
+3 Andere
+4 T-Shirt
