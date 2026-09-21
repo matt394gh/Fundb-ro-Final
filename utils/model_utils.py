@@ -24,30 +24,31 @@ def load_config() -> dict:
 
 
 def load_labels() -> list:
-    """Lädt und bereinigt die Klassen-Labels aus labels.txt."""
+    """Lädt die Labels und sortiert sie strikt nach ihrer Index-Nummer."""
     if not LABELS_PATH.exists():
         st.warning(f"⚠️ Label-Datei nicht gefunden unter: `{LABELS_PATH}`")
-        return ["Sonstiges"]
+        return ["Pullover", "Hose", "Schuhe", "Andere", "T-Shirt"]
 
-    labels = []
+    labels_dict = {}
     try:
         with open(LABELS_PATH, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
                     continue
-                # Trennt Teachable-Machine Format (z.B. "0 Hoodie" -> "Hoodie")
                 parts = line.split(" ", 1)
-                if len(parts) > 1 and parts[0].isdigit():
-                    clean_label = parts[1].strip()
-                else:
-                    clean_label = line
-                labels.append(clean_label)
+                if len(parts) == 2 and parts[0].isdigit():
+                    idx = int(parts[0])
+                    label_name = parts[1].strip()
+                    labels_dict[idx] = label_name
+
+        # Erstellt eine Liste sortiert nach Index (0, 1, 2, 3, 4)
+        sorted_labels = [labels_dict[i] for i in sorted(labels_dict.keys())]
+        return sorted_labels if sorted_labels else ["Pullover", "Hose", "Schuhe", "Andere", "T-Shirt"]
+
     except Exception as e:
         st.error(f"Fehler beim Lesen von labels.txt: {e}")
-        return ["Sonstiges"]
-
-    return labels if labels else ["Sonstiges"]
+        return ["Pullover", "Hose", "Schuhe", "Andere", "T-Shirt"]
 
 
 @st.cache_resource
