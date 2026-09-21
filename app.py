@@ -184,53 +184,26 @@ elif st.session_state.page == "upload":
 
 
 # ==========================================
-# SEITE: SUCHEN
+# SEITE: SUCHEN (GALERIE-ANSICHT)
 # ==========================================
 elif st.session_state.page == "search":
-    st.markdown("<h2 style='color: #D0001B;'>🔍 Klamotten suchen</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color: #D0001B;'>🔍 Klamotten-Galerie</h2>", unsafe_allow_html=True)
 
     items = load_items()
 
-    # 1. KI-BILDSEARCH-BEREICH
-    st.markdown("### 📸 KI-Bildsuche (Verlorenes Kleidungsstück fotografieren)")
-    search_image = st.file_uploader(
-        "Lade ein Foto hoch – die KI filtert automatisch nach passenden Fundstücken", 
-        type=["jpg", "jpeg", "png", "webp"], 
-        key="search_img_upload"
-    )
-
-    ai_matched_category = None
-
-    if search_image is not None:
-        with st.spinner("KI vergleicht das Foto mit dem Fundbüro-Bestand..."):
-            prediction = predict_clothing(search_image)
-            ai_matched_category = prediction["label"]
-            conf = prediction["confidence"] * 100
-            
-            if conf >= 55:
-                st.success(f"Erkannte Kategorie für Suche: **{ai_matched_category}** (Sicherheit: {conf:.1f}%)")
-            else:
-                st.warning(f"Kategorie unsicher ({conf:.1f}%). Es wird trotzdem nach **{ai_matched_category}** gefiltert.")
-
-    # 2. MANUELLE FILTER
-    with st.expander("🔎 Manuelle Filter & Suche anpassen", expanded=(search_image is None)):
+    # Filterleiste
+    with st.expander("🔎 Filter & Suche anpassen", expanded=True):
         f_col1, f_col2, f_col3 = st.columns(3)
         with f_col1:
-            search_query = st.text_input("Freitextsuche", placeholder="Suchbegriff...")
-            # Fallback auf KI-Kategorie, falls Bild hochgeladen wurde
-            cats = get_unique_categories(items)
-            default_cat_idx = 0
-            if ai_matched_category in cats:
-                default_cat_idx = cats.index(ai_matched_category) + 1
-            
-            selected_cat = st.selectbox("Kategorie", options=["Alle"] + cats, index=default_cat_idx)
+            search_query = st.text_input("Freitextsuche", placeholder="z.B. Marke, Beschreibung...")
+            selected_cat = st.selectbox("Kategorie", options=["Alle"] + get_unique_categories(items))
         with f_col2:
             selected_color = st.selectbox("Farbe", options=["Alle"] + get_unique_colors(items))
             selected_location = st.selectbox("Fundort", options=["Alle"] + get_unique_locations(items))
         with f_col3:
-            selected_status = st.selectbox("Status", options=["Alle", "Verfügbar", "Reserviert", "Abgeholt", "Archiviert"])
+            selected_status = st.selectbox("Status", options=["Alle", "Verfügbar", "Reserviert", "Abgeholt"])
 
-    # 3. FILTERN DER ERGEBNISSE
+    # Filter anwenden
     filtered = filter_items(
         items,
         query=search_query,
@@ -241,20 +214,50 @@ elif st.session_state.page == "search":
     )
 
     st.markdown(f"**{len(filtered)}** Fundstücke gefunden.")
+    st.markdown("<br>", unsafe_allow_html=True)
 
     if not filtered:
         st.info("Keine passenden Kleidungsstücke gefunden.")
         if st.button("❓ NICHT DAS RICHTIGE GEFUNDEN?"):
             st.warning("Bitte wende dich direkt an das Fundbüro-Team im Sekretariat des Katharineums!")
     else:
-        # Rasteranzeige (3 Spalten)
+        # FOTO-GALERIE (3 Spalten Nebeneinander)
         cols = st.columns(3)
         for idx, item in enumerate(filtered):
             col = cols[idx % 3]
             with col:
-                render_item_card(item)
-                if st.button(f"Details ansehen ## {item['id']}", key=f"btn_det_{item['id']}", use_container_width=True):
-                    navigate_to("detail", item["id"])
+                # Karten-Container für das Foto
+                with st.container():
+                    # 1. Bild anzeigen (Fallback, falls kein Bild da ist)
+                    img_path = Path(item.get("image_path", ""))
+                    if img_path.exists():
+                        st.image(str(img_path), use_container_width=True)
+                    else:
+                        # Platzhalter-Grafik/Text falls Bild fehlt
+                        st.markdown(
+                            "<div style='background-color: #eee; height: 180px; display: flex; align-items: center; justify-content: center; border-radius: 8px; color: #888;'>📷 Kein Foto vorhanden</div>", 
+                            unsafe_allow_html=True
+                        )
+
+                    # 2. Status & Titel direkt unter dem Bild
+                    status = item.get("status", "Verfügbar")
+                    badge_color = "#28a745" if status == "Verfügbar" else "#ffc107"
+                    
+                    st.markdown(f"""
+                        <div style="margin-top: 8px; margin-bottom: 4px;">
+                            <span style="background-color: {badge_color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">{status}</span>
+                            <h4 style="margin: 4px 0 0 0; color: #D0001B;">{item.get('category', 'Kleidungsstück')}</h4>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+                    # 3. Kurze Info-Details
+                    st.caption(f"🎨 **Farbe:** {item.get('color', '-')} | 📍 **Ort:** {item.get('location_found', '-')}")
+
+                    # 4. Button für Detailseite
+                    if st.button("Details & Anfragen", key=f"btn_gal_{item['id']}", use_container_width=True):
+                        navigate_to("detail", item["id"])
+                
+                st.markdown("<br>", unsafe_allow_html=True)
 
 # ==========================================
 # SEITE: DETAILANSICHT
