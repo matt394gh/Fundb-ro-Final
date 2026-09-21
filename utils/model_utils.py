@@ -87,16 +87,29 @@ def predict_clothing(image_file) -> dict:
         }
 
     try:
+        # 1. Bild öffnen & in RGB umwandeln
         img = Image.open(image_file).convert("RGB")
+        
+        # 2. Genau wie Teachable Machine: Quadratisch zuschneiden und auf 224x224 skalieren
         target_size = (224, 224)
         img = ImageOps.fit(img, target_size, Image.Resampling.LANCZOS)
 
+        # 3. In NumPy-Array umwandeln
         img_array = np.asarray(img, dtype=np.float32)
+
+        # 4. Teachable Machine Formel: Werte von [0, 255] auf [-1, 1] umrechnen
         normalized_img = (img_array / 127.5) - 1.0
+
+        # 5. Batch-Dimension hinzufügen
         img_array = np.expand_dims(normalized_img, axis=0)
 
+        # 6. Vorhersage ausführen
         preds = model.predict(img_array)[0]
 
+        # DEBUG: Zeigt im Streamlit Cloud Log die echten Prozentwerte an
+        print("ROH-VORHERSAGE VOM MODELL:", preds)
+
+        # 7. Ergebnisse den Labels zuordnen
         probs = {}
         for idx, prob in enumerate(preds):
             lbl = labels[idx] if idx < len(labels) else f"Klasse_{idx}"
@@ -121,7 +134,6 @@ def predict_clothing(image_file) -> dict:
             "confidence": 0.0,
             "probabilities": {}
         }
-
 
 def get_model_info() -> dict:
     """Gibt Statusinformationen zum Modell zurück."""
