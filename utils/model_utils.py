@@ -93,15 +93,24 @@ def predict_clothing(image_file) -> dict:
         # 1. Bild öffnen & auf RGB konvertieren
         img = Image.open(image_file).convert("RGB")
 
-        # 2. Resizing inklusive Zuschneiden (LANCZOS erhält Details besser)
-        target_size = (config.get("image_width", 224), config.get("image_height", 224))
-        img = ImageOps.fit(img, target_size, Image.Resampling.LANCZOS)
+        # 1. Bild auf RGB
+img = Image.open(image_file).convert("RGB")
 
-        # 3. In Numpy-Array umwandeln
-        img_array = np.asarray(img, dtype=np.float32)
+# 2. Auf 224x224 anpassen (wie bei Teachable Machine)
+target_size = (224, 224)
+img = ImageOps.fit(img, target_size, Image.Resampling.LANCZOS)
 
-        # 4. Vorverarbeitung (Teachable-Machine Normalisierung auf Bereich [-1, 1])
-        normalized_img = (img_array / 127.5) - 1.0
+# 3. In Array umwandeln
+img_array = np.asarray(img, dtype=np.float32)
+
+# 4. Normalisierung (-1 bis 1) -> Wichtig für Teachable Machine!
+normalized_img = (img_array / 127.5) - 1.0
+
+# 5. Batch-Dimension
+img_array = np.expand_dims(normalized_img, axis=0)
+
+# 6. Vorhersage
+preds = model.predict(img_array)[0]
 
         # 5. Batch-Dimension hinzufügen
         img_array = np.expand_dims(normalized_img, axis=0)
