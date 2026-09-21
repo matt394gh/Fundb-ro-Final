@@ -9,7 +9,7 @@ import streamlit as st
 BASE_DIR = Path(__file__).resolve().parent.parent
 MODEL_PATH = BASE_DIR / "keras_model.h5"
 CONFIG_PATH = BASE_DIR / "config.json"
-LABELS_PATH = BASE_DIR / "labels.txt"  # Erwartet labels.txt von Teachable Machine im Hauptordner
+LABELS_PATH = BASE_DIR / "labels.txt"
 
 
 def load_config() -> dict:
@@ -42,7 +42,6 @@ def load_labels() -> list:
                     label_name = parts[1].strip()
                     labels_dict[idx] = label_name
 
-        # Erstellt eine Liste sortiert nach Index (0, 1, 2, 3, 4)
         sorted_labels = [labels_dict[i] for i in sorted(labels_dict.keys())]
         return sorted_labels if sorted_labels else ["Pullover", "Hose", "Schuhe", "Andere", "T-Shirt"]
 
@@ -58,11 +57,10 @@ def load_keras_model():
         st.error(f"❌ Modell-Datei nicht gefunden unter: `{MODEL_PATH}`")
         return None
 
-    # Prüfung auf Git LFS Pointer-Datei (falls die Datei nicht richtig hochgeladen wurde)
-    if MODEL_PATH.stat().st_size < 1000000:  # Kleiner als ~1 MB
+    if MODEL_PATH.stat().st_size < 1000000:
         st.error(
             f"❌ Die Datei `{MODEL_PATH.name}` ist zu klein ({MODEL_PATH.stat().st_size} Bytes). "
-            "Vermutlich wurde nur ein Git-Pointer hochgeladen! Bitte lade die echte .h5-Datei manuell auf GitHub hoch."
+            "Vermutlich wurde nur ein Git-Pointer hochgeladen!"
         )
         return None
 
@@ -81,7 +79,6 @@ def predict_clothing(image_file) -> dict:
     labels = load_labels()
     model = load_keras_model()
 
-    # Fallback, falls das Modell nicht geladen werden konnte
     if model is None:
         return {
             "label": "Sonstiges (Modell nicht geladen)",
@@ -90,35 +87,16 @@ def predict_clothing(image_file) -> dict:
         }
 
     try:
-        # 1. Bild öffnen & auf RGB konvertieren
         img = Image.open(image_file).convert("RGB")
+        target_size = (224, 224)
+        img = ImageOps.fit(img, target_size, Image.Resampling.LANCZOS)
 
-        # 1. Bild auf RGB
-img = Image.open(image_file).convert("RGB")
-
-# 2. Auf 224x224 anpassen (wie bei Teachable Machine)
-target_size = (224, 224)
-img = ImageOps.fit(img, target_size, Image.Resampling.LANCZOS)
-
-# 3. In Array umwandeln
-img_array = np.asarray(img, dtype=np.float32)
-
-# 4. Normalisierung (-1 bis 1) -> Wichtig für Teachable Machine!
-normalized_img = (img_array / 127.5) - 1.0
-
-# 5. Batch-Dimension
-img_array = np.expand_dims(normalized_img, axis=0)
-
-# 6. Vorhersage
-preds = model.predict(img_array)[0]
-
-        # 5. Batch-Dimension hinzufügen
+        img_array = np.asarray(img, dtype=np.float32)
+        normalized_img = (img_array / 127.5) - 1.0
         img_array = np.expand_dims(normalized_img, axis=0)
 
-        # 6. Vorhersage ausführen
         preds = model.predict(img_array)[0]
 
-        # 7. Ergebnisse den Labels zuordnen
         probs = {}
         for idx, prob in enumerate(preds):
             lbl = labels[idx] if idx < len(labels) else f"Klasse_{idx}"
@@ -127,7 +105,6 @@ preds = model.predict(img_array)[0]
         sorted_probs = sorted(probs.items(), key=lambda x: x[1], reverse=True)
         top_label, top_conf = sorted_probs[0]
 
-        # Threshold prüfen
         threshold = config.get("confidence_threshold", 0.30)
         final_label = top_label if top_conf >= threshold else "Unbekannt / Nicht eindeutig"
 
@@ -147,7 +124,7 @@ preds = model.predict(img_array)[0]
 
 
 def get_model_info() -> dict:
-    """Gibt Statusinformationen zum Modell für den Admin-Bereich zurück."""
+    """Gibt Statusinformationen zum Modell zurück."""
     model = load_keras_model()
     labels = load_labels()
     config = load_config()
