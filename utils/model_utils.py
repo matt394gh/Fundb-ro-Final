@@ -1,15 +1,15 @@
 import os
 import json
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 from pathlib import Path
 import streamlit as st
 
 # Pfade definieren (Hauptverzeichnis des Projekts)
 BASE_DIR = Path(__file__).resolve().parent.parent
-MODEL_PATH = BASE_DIR / "keras_model.h5"  # Passe den Dateinamen an, falls er anders heißt (z. B. mobilenet.h5)
+MODEL_PATH = BASE_DIR / "keras_model.h5"
 CONFIG_PATH = BASE_DIR / "config.json"
-LABELS_PATH = BASE_DIR / "labels.json"
+LABELS_PATH = BASE_DIR / "labels.txt"  # Erwartet labels.txt von Teachable Machine im Hauptordner
 
 
 def load_config() -> dict:
@@ -24,14 +24,30 @@ def load_config() -> dict:
 
 
 def load_labels() -> list:
-    """Lädt die Klassen-Labels."""
-    if LABELS_PATH.exists():
-        try:
-            with open(LABELS_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            st.warning(f"Fehler beim Laden von labels.json: {e}")
-    return ["Sonstiges"]
+    """Lädt und bereinigt die Klassen-Labels aus labels.txt."""
+    if not LABELS_PATH.exists():
+        st.warning(f"⚠️ Label-Datei nicht gefunden unter: `{LABELS_PATH}`")
+        return ["Sonstiges"]
+
+    labels = []
+    try:
+        with open(LABELS_PATH, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                # Trennt Teachable-Machine Format (z.B. "0 Hoodie" -> "Hoodie")
+                parts = line.split(" ", 1)
+                if len(parts) > 1 and parts[0].isdigit():
+                    clean_label = parts[1].strip()
+                else:
+                    clean_label = line
+                labels.append(clean_label)
+    except Exception as e:
+        st.error(f"Fehler beim Lesen von labels.txt: {e}")
+        return ["Sonstiges"]
+
+    return labels if labels else ["Sonstiges"]
 
 
 @st.cache_resource
@@ -73,9 +89,6 @@ def predict_clothing(image_file) -> dict:
         }
 
     try:
-        from PIL import Image, ImageOps
-        import numpy as np
-
         # 1. Bild öffnen & auf RGB konvertieren
         img = Image.open(image_file).convert("RGB")
 
