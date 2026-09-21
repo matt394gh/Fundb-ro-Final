@@ -184,34 +184,68 @@ elif st.session_state.page == "upload":
 
 
 # ==========================================
-# SEITE: SUCHEN (GALERIE-ANSICHT)
+# SEITE: SUCHEN (GALERIE-ANSICHT MIT OBERTEIL-FILTER)
 # ==========================================
 elif st.session_state.page == "search":
     st.markdown("<h2 style='color: #D0001B;'>🔍 Klamotten-Galerie</h2>", unsafe_allow_html=True)
 
     items = load_items()
 
+    # Vordefinierte Kategorien-Gruppen / Auswahlliste
+    kategorie_optionen = [
+        "Alle Kategorien",
+        "Oberteile (Pullover, T-Shirt, Hoodie, Jacke)",
+        "Hosen & Röcke",
+        "Schuhe",
+        "Accessoires (Mütze, Schal, etc.)",
+        "Sonstiges"
+    ]
+
     # Filterleiste
     with st.expander("🔎 Filter & Suche anpassen", expanded=True):
         f_col1, f_col2, f_col3 = st.columns(3)
         with f_col1:
             search_query = st.text_input("Freitextsuche", placeholder="z.B. Marke, Beschreibung...")
-            selected_cat = st.selectbox("Kategorie", options=["Alle"] + get_unique_categories(items))
+            selected_cat_group = st.selectbox("Kategorie-Gruppe", options=kategorie_optionen)
+            
         with f_col2:
             selected_color = st.selectbox("Farbe", options=["Alle"] + get_unique_colors(items))
             selected_location = st.selectbox("Fundort", options=["Alle"] + get_unique_locations(items))
+            
         with f_col3:
             selected_status = st.selectbox("Status", options=["Alle", "Verfügbar", "Reserviert", "Abgeholt"])
 
-    # Filter anwenden
+    # 1. Freitext-, Farb-, Fundort- und Status-Filter vorab anwenden
     filtered = filter_items(
         items,
         query=search_query,
-        category=selected_cat if selected_cat != "Alle" else None,
         color=selected_color if selected_color != "Alle" else None,
         location=selected_location if selected_location != "Alle" else None,
         status=selected_status if selected_status != "Alle" else None
     )
+
+    # 2. Logik für Oberteile und spezifische Kategorie-Gruppen
+    if selected_cat_group == "Oberteile (Pullover, T-Shirt, Hoodie, Jacke)":
+        oberteile_keywords = ["pullover", "t-shirt", "hoodie", "jacke", "oberteil", "hemd", "bluse", "sweatshirt", "top"]
+        filtered = [
+            i for i in filtered 
+            if any(kw in i.get("category", "").lower() for kw in oberteile_keywords) 
+            or any(kw in i.get("ai_prediction", "").lower() for kw in oberteile_keywords)
+        ]
+    elif selected_cat_group == "Hosen & Röcke":
+        hosen_keywords = ["hose", "jeans", "shorts", "rock", "leggings"]
+        filtered = [
+            i for i in filtered 
+            if any(kw in i.get("category", "").lower() for kw in hosen_keywords)
+        ]
+    elif selected_cat_group == "Schuhe":
+        filtered = [i for i in filtered if "schuh" in i.get("category", "").lower() or "sneaker" in i.get("category", "").lower()]
+    elif selected_cat_group == "Accessoires (Mütze, Schal, etc.)":
+        acc_keywords = ["mütze", "schal", "handschuhe", "kappe", "mütze/hut", "tasche"]
+        filtered = [i for i in filtered if any(kw in i.get("category", "").lower() for kw in acc_keywords)]
+    elif selected_cat_group == "Sonstiges":
+        bekannte = ["pullover", "t-shirt", "hoodie", "jacke", "oberteil", "hose", "jeans", "rock", "schuh", "mütze", "schal"]
+        filtered = [i for i in filtered if not any(kw in i.get("category", "").lower() for kw in bekannte)]
 
     st.markdown(f"**{len(filtered)}** Fundstücke gefunden.")
     st.markdown("<br>", unsafe_allow_html=True)
@@ -226,20 +260,18 @@ elif st.session_state.page == "search":
         for idx, item in enumerate(filtered):
             col = cols[idx % 3]
             with col:
-                # Karten-Container für das Foto
                 with st.container():
-                    # 1. Bild anzeigen (Fallback, falls kein Bild da ist)
+                    # Bild anzeigen
                     img_path = Path(item.get("image_path", ""))
                     if img_path.exists():
                         st.image(str(img_path), use_container_width=True)
                     else:
-                        # Platzhalter-Grafik/Text falls Bild fehlt
                         st.markdown(
                             "<div style='background-color: #eee; height: 180px; display: flex; align-items: center; justify-content: center; border-radius: 8px; color: #888;'>📷 Kein Foto vorhanden</div>", 
                             unsafe_allow_html=True
                         )
 
-                    # 2. Status & Titel direkt unter dem Bild
+                    # Status & Titel
                     status = item.get("status", "Verfügbar")
                     badge_color = "#28a745" if status == "Verfügbar" else "#ffc107"
                     
@@ -250,10 +282,9 @@ elif st.session_state.page == "search":
                         </div>
                     """, unsafe_allow_html=True)
 
-                    # 3. Kurze Info-Details
+                    # Details & Button
                     st.caption(f"🎨 **Farbe:** {item.get('color', '-')} | 📍 **Ort:** {item.get('location_found', '-')}")
 
-                    # 4. Button für Detailseite
                     if st.button("Details & Anfragen", key=f"btn_gal_{item['id']}", use_container_width=True):
                         navigate_to("detail", item["id"])
                 
