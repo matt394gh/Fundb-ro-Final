@@ -7,7 +7,7 @@ import streamlit as st
 
 # Pfade definieren (Hauptverzeichnis des Projekts)
 BASE_DIR = Path(__file__).resolve().parent.parent
-MODEL_PATH = BASE_DIR / "model.h5"  # Passe den Dateinamen an, falls er anders heißt (z. B. mobilenet.h5)
+MODEL_PATH = BASE_DIR / "keras_model.h5"  # Passe den Dateinamen an, falls er anders heißt (z. B. mobilenet.h5)
 CONFIG_PATH = BASE_DIR / "config.json"
 LABELS_PATH = BASE_DIR / "labels.json"
 
