@@ -73,22 +73,24 @@ def predict_clothing(image_file) -> dict:
         }
 
     try:
+        from PIL import Image, ImageOps
+        import numpy as np
+
         # 1. Bild öffnen & auf RGB konvertieren
         img = Image.open(image_file).convert("RGB")
 
-        # 2. Resizing auf Eingabegröße (Standard: 224x224)
+        # 2. Resizing inklusive Zuschneiden (LANCZOS erhält Details besser)
         target_size = (config.get("image_width", 224), config.get("image_height", 224))
-        img = img.resize(target_size)
+        img = ImageOps.fit(img, target_size, Image.Resampling.LANCZOS)
 
         # 3. In Numpy-Array umwandeln
         img_array = np.asarray(img, dtype=np.float32)
 
-        # 4. Bild-Vorverarbeitung für MobileNetV2 / Keras
-        from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
-        img_array = preprocess_input(img_array)
+        # 4. Vorverarbeitung (Teachable-Machine Normalisierung auf Bereich [-1, 1])
+        normalized_img = (img_array / 127.5) - 1.0
 
         # 5. Batch-Dimension hinzufügen
-        img_array = np.expand_dims(img_array, axis=0)
+        img_array = np.expand_dims(normalized_img, axis=0)
 
         # 6. Vorhersage ausführen
         preds = model.predict(img_array)[0]
@@ -102,7 +104,7 @@ def predict_clothing(image_file) -> dict:
         sorted_probs = sorted(probs.items(), key=lambda x: x[1], reverse=True)
         top_label, top_conf = sorted_probs[0]
 
-        # Threshold prüfen (Standard heruntergesetzt auf 0.30 für bessere Treffer)
+        # Threshold prüfen
         threshold = config.get("confidence_threshold", 0.30)
         final_label = top_label if top_conf >= threshold else "Unbekannt / Nicht eindeutig"
 
